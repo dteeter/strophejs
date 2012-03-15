@@ -539,6 +539,21 @@ Strophe = {
         return text;
     },
 
+    /** Function: xmlCDATANode
+     *  Creates an XML DOM cdata node.
+     *  Helpful in reducing the number of escapes (saving bytes) when sending a json payload
+     *  
+     *  Parameters:
+     *    (String) text - The content of the cdata node.
+     *
+     *  Returns:
+     *    A new XML DOM cdata node.
+     */
+    xmlCDATANode: function (text)
+    {
+        return Strophe.xmlGenerator().createCDATASection(text);
+    },
+    
     /** Function: xmlTextNode
      *  Creates an XML DOM text node.
      *
@@ -1210,7 +1225,24 @@ Strophe.Builder.prototype = {
         this.node.appendChild(child);
         return this;
     },
-
+    /** Function: cdata
+     *  Add a child cdata element.
+     *
+     *  This *does not* make the child the new current element since there
+     *  are no children of text elements.
+     *
+     *  Parameters:
+     *    (String) text - The text in the cdata data to append to the current element.
+     *
+     *  Returns:
+     *    The Strophe.Builder object.
+     */
+    cdata: function (text)
+    {
+      var child = Strophe.xmlCDATANode(text);
+      this.node.appendChild(child);
+      return this;
+    }
     /** Function: h
      *  Replace current element contents with the HTML passed in.
      *
@@ -1277,6 +1309,11 @@ Strophe.Handler = function (handler, ns, name, type, id, from, options)
     this.id = id;
     this.options = options || {matchbare: false};
     
+    // default matchNodeName to false if undefined
+    if (!this.options.matchNodeName) {
+      this.options.matchNodeName = false;
+    }
+    
     // default matchBare to false if undefined
     if (!this.options.matchBare) {
         this.options.matchBare = false;
@@ -1306,6 +1343,17 @@ Strophe.Handler.prototype = {
     {
         var nsMatch;
         var from = null;
+        
+        if (this.options.matchNodeName) {
+	        var nodeName = Strophe.getPubSubNodeName(elem);
+	        //the handler only listens to "messages" from the correct node (filters out publish confirmations)
+	        if (elem.tagName == 'message' && nodeName == this.options.matchNodeName) {
+	           return true;
+	        }
+	        else {
+	          return false;
+	        }
+	      }
         
         if (this.options.matchBare) {
             from = Strophe.getBareJidFromJid(elem.getAttribute('from'));
@@ -2713,6 +2761,25 @@ Strophe.Connection.prototype = {
                 }
             }
         });
+    },
+    
+    
+    /** Function: getPubSubNodeName
+     *  Given an IQ node, descend down to the publish or message tag and determine the
+     *  node name from which this message was received
+     *
+     *  Parameters:
+     *    (iq) elem - The iq element from the pubsub respsonse
+     *
+     */
+    getPubSubNodeName : function (iq) {
+      var nodeName;
+
+      if (iq != null && iq.hasChildNodes() &&
+          iq.childNodes[0].hasChildNodes()) {
+        nodeName = iq.childNodes[0].childNodes[0].getAttribute("node");
+      }
+      return nodeName;
     },
 
     /** PrivateFunction: _sendTerminate
